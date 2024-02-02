@@ -16,8 +16,14 @@ This Python script utilizes the Telethon library to check for unread messages on
    ```
 2. Rename config_exmaple.py to config.py
 3. fill config.py
-4. run, and follow instruction
+4. first run in terminal and follow instruction
 
 ```
 python3 tlg_check_messages_count.py
+```
+5. add to cron or systemd
+
+run every one minute
+```
+* * * * * python3 /path/to/your/tlg_check_messages_count.py > /dev/null
 ```
