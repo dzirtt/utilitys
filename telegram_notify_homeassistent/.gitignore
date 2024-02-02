@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyz
+*.pyw
+*.pyproj
+*.pyc
+
+# Logs
+*.log
+
+# Config files
+config.py
+
+#telehon session cookies
+*.session
+
+# Compiled files
+*.pyc
+
+# Package files
+*.zip
+*.tar.gz
