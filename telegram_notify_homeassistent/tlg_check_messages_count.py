@@ -5,6 +5,9 @@ from requests import post
 import pprint, pytz, asyncio
 import logging as log
 import config as config
+import os
+
+session_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tlg_notify_hass.session')
 
 api_id = config.api_id
 api_hash = config.api_hash
@@ -72,7 +75,7 @@ if __name__ == '__main__':
     
     initLogging()
     
-    client = TelegramClient('tlg_notify_hass', api_id, api_hash, base_logger=log.NullHandler())
+    client = TelegramClient(session_file_path, api_id, api_hash, base_logger=log.NullHandler())
     loop = asyncio.get_event_loop()
     unread_count_summary = loop.run_until_complete(check_unread_messages())
     
