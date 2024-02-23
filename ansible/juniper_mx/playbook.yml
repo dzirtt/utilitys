@@ -1,0 +1,15 @@
+---
+- hosts: all
+  connection: local
+  gather_facts: no
+  collections:
+    - juniper.device
+
+  vars:
+    mode: "telnet"
+    timeout: 300
+    ansible_python_interpreter: /usr/local/bin/python3.11
+
+  roles:
+    - get_wave
+    #- test

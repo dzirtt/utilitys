@@ -1,0 +1,22 @@
+# Ignore Ansible fact caching directory
+.ansible/
+
+# Ignore local inventory file
+inventory.ini
+
+# Ignore generated playbooks or roles
+*.retry
+*.log
+
+# Ignore Ansible roles directory if using Ansible Galaxy
+roles/
+
+# Ignore Ansible artifacts
+*.swp
+*.swo
+
+# Ignore virtual environment if using one
+venv/
+
+#
+inventory.ini

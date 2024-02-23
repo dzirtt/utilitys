@@ -1,0 +1,206 @@
+---
+- hosts: all
+  gather_facts: true
+  become: yes
+  become_user: root
+
+  tasks:
+    - name: Add Debian squeeze repositories
+      lineinfile:
+        path: /etc/apt/sources.list
+        line: "{{ item }}"
+      loop:
+        - "deb http://archive.debian.org/debian-archive/debian/ squeeze main contrib non-free"
+        - "deb http://archive.debian.org/debian-archive/debian/ squeeze-lts main contrib non-free"
+
+    - name: Update aptitude
+      apt:
+        update_cache: yes
+      ignore_errors: true
+      environment:
+        APT_LISTCHANGES_FRONTEND: none
+
+    - name: Install required packages
+      ignore_errors: true
+      shell: apt-get install -y --allow-unauthenticated {{ item }}
+      loop:
+          - wget
+
+    - name: Copy files
+      copy:
+        src: files/ # Update the path accordingly
+        dest: /tmp/
+
+    - name: Determine architecture
+      set_fact:
+        architecture_mapping: {'x86_64': amd64, 'i386': i386}
+
+
+    - name: Set architecture variable
+      set_fact:
+        architecture: "{{ architecture_mapping[ansible_architecture] | default(ansible_architecture) }}"
+
+    - name: Install libcurl3-gnutls package
+      shell: dpkg -i /tmp/libcurl3-gnutls_7.21.0-2.1+squeeze8_{{ architecture }}.deb
+        
+    - name: Install zabbix-agent package
+      shell: dpkg -i /tmp/zabbix-agent_2.0.17-1_{{ architecture }}.deb
+
+    - name: Add iptables rule
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: '10050'
+        jump: ACCEPT
+
+    - name: Save iptables rules
+      shell: iptables-save > /etc/iptables-save
+
+    - name: Clear Zabbix agent configuration
+      copy:
+        content: ""
+        dest: /etc/zabbix/zabbix_agentd.conf
+
+    - name: Create Zabbix agent configuration
+      blockinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        block: |
+          PidFile=/var/run/zabbix/zabbix_agentd.pid
+          LogFile=/var/log/zabbix/zabbix_agentd.log
+          LogFileSize=0
+          EnableRemoteCommands=1
+          Timeout=10
+          LogRemoteCommands=1
+          Server=10.168.147.5
+          ListenIP=0.0.0.0
+          ServerActive=10.168.147.5
+          AllowRoot=1
+          Include=/etc/zabbix/zabbix_agentd.d/
+
+    - name: Clear Additional Zabbix agent configuration
+      ignore_errors: true
+      copy:
+        content: ""
+        dest: /etc/zabbix/zabbix_agentd.d/userparam_zabbix.conf
+      tags:
+      - config 
+
+    - name: Additional Zabbix agent configuration 1
+      blockinfile:
+        path: /etc/zabbix/zabbix_agentd.d/userparam_zabbix.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK 1"
+        block: |
+          UserParameter=radius-ok-count,cat /tmp/ok_count
+          UserParameter=radius-incorrect-count,cat /tmp/ok_incorrect
+          UserParameter=root-partition-rw-status,mount | grep ' / ' | grep -e '(.*)' -o | cut -d',' -f1 | sed 's\(\\g' | grep rw > /dev/null; echo $?
+      tags:
+      - config 
+
+    - name: Add commands to crontab 1 
+      cron:
+        name: "Count OK in radius.log"
+        minute: "*/2"
+        job: "cat /var/log/freeradius/radius.log | grep OK | wc -l 2>&1 > /tmp/ok_count"
+      tags:
+      - config 
+
+    - name: Add commands to crontab 2
+      cron:
+        name: "Count 'Login incorrect' in radius.log"
+        minute: "*/2"
+        job: "cat /var/log/freeradius/radius.log | grep 'Login incorrect' | wc -l 2>&1 > /tmp/ok_incorrect"
+      tags:
+      - config 
+
+- hosts: radius-pppoe
+  gather_facts: true
+  become: yes
+  become_user: root
+  
+  tasks:
+    - name: Additional Zabbix agent configuration 2
+      blockinfile:
+        create: yes
+        path: /etc/zabbix/zabbix_agentd.d/userparam_zabbix.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK 2"
+        block: |
+          UserParameter=radius-auth-time,/usr/bin/time --quiet -f "%e" sh -c 'radtest office_technic3 abc3213 localhost 1812 test > /dev/null' 2>&1
+      tags:
+      - config 
+
+    - name: Restart Zabbix agent
+      service:
+        name: zabbix-agent
+        state: restarted
+      tags:
+      - config       
+
+
+- hosts: radius-ipoe-vrn
+  gather_facts: true
+  become: yes
+  become_user: root
+  
+  tasks:
+    - name: Additional Zabbix agent configuration 2
+      blockinfile:
+        create: yes
+        path: /etc/zabbix/zabbix_agentd.d/userparam_zabbix.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK 2"
+        block: |
+          UserParameter=radius-auth-time,/usr/bin/time --quiet -f "%e" sh -c 'echo "NAS-Port-Id=MX960_VRN2:3906-503,NAS-IP-Address=172.28.254.200" | radclient -x 127.0.0.1:1812 auth testing123 > /dev/null' 2>&1
+      tags:
+      - config 
+      
+    - name: Restart Zabbix agent
+      service:
+        name: zabbix-agent
+        state: restarted
+      tags:
+      - config 
+
+- hosts: radius-ipoe-lip
+  gather_facts: true
+  become: yes
+  become_user: root
+  
+  tasks:
+    - name: Additional Zabbix agent configuration 2
+      blockinfile:
+        path: /etc/zabbix/zabbix_agentd.d/userparam_zabbix.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK 2"
+        block: |
+          UserParameter=radius-auth-time,/usr/bin/time --quiet -f "%e" sh -c 'echo "NAS-Port-Id=MX960_VRN2:3602-660,NAS-IP-Address=172.28.254.200" | radclient -x 127.0.0.1:1812 auth testing123 > /dev/null' 2>&1
+      tags:
+      - config 
+      
+    - name: Restart Zabbix agent
+      service:
+        name: zabbix-agent
+        state: restarted
+      tags:
+      - config 
+      
+- hosts: radius-ipoe-kursk
+  gather_facts: false
+  become: yes
+  become_user: root
+  
+  tasks:
+    - name: Additional Zabbix agent configuration 2
+      blockinfile:
+        create: yes
+        marker: "# {mark} ANSIBLE MANAGED BLOCK 2"
+        path: /etc/zabbix/zabbix_agentd.d/userparam_zabbix.conf
+        block: |
+          UserParameter=radius-auth-time,/usr/bin/time --quiet -f "%e" sh -c 'echo "ADSL-Agent-Remote-Id=16359,ADSL-Agent-Circuit-Id=21,NAS-IP-Address=172.28.254.156,Acct-Session-Id=123" | radclient localhost:1812 auth testing123 -x > /dev/null' 2>&1
+      tags:
+      - config 
+      
+    - name: Restart Zabbix agent
+      service:
+        name: zabbix-agent
+        state: restarted
+      tags:
+      - config 
+      
